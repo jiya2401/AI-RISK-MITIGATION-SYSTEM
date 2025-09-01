@@ -15,3 +15,10 @@ An AI-powered system designed to **monitor and mitigate risks** (**hallucination
 This project is just the beginning 🚀.  
 In future, there are **many updates planned** to make the system even more powerful and full of functionality.
 
+## Application Interface
+
+Here is a preview of the AI Risk Mitigation System interface:
+
+![App Screenshot](https://github.com/jiya2401/AI-RISK-MITIGATION-SYSTEM/raw/main/Screenshot%202025-09-01%20182030.png)
+
+

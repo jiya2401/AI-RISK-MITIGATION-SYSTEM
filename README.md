@@ -5,11 +5,11 @@ An AI-powered system designed to **monitor and mitigate risks** (**hallucination
 ## Features
 - ✅ MERN-based chat application  OpenAI API  (GPT-4O-MINI) + Python ML
 ## Future Scope
-This project is just the beginning 🚀.  
+-This project is just the beginning 🚀.  
 In future, there are **many updates planned** to make the system even more powerful and full of functionality.
 
 
-## Dashboard
+## Pensar Console
  ✅ Dashboard with scan results (dependency & security checks via **Pensar Console**)
 
 ![Dashboard Screenshot](https://github.com/jiya2401/AI-RISK-MITIGATION-SYSTEM/blob/main/Screenshot%202025-09-01%20175822.png?raw=true)

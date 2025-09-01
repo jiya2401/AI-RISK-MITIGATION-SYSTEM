@@ -66,12 +66,9 @@ function Chat() {
     <>
       {newChat && (
         <div className="welcome-container">
-          <div className="welcome-title">
-            ✨ स्पष्टGPT
-          </div>
-          <p className="welcome-subtitle">
-            Welcome! Ask me anything and I'll help you with detailed, thoughtful responses.
-          </p>
+      
+         <h3>  Welcome to स्पष्टGPT — Your Trusted AI Risk Mitigation Partner </h3> 
+        
         </div>
       )}
       

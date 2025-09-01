@@ -60,7 +60,7 @@ def load_trained_model(model_dir="saved_medbert_model"):
     
     # Load the saved metadata and weights
     checkpoint_path = os.path.join(model_dir, "classifier_weights.pth")
-    checkpoint = torch.load(checkpoint_path, map_location=device)
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     
     # Extract configuration
     label_mapping = checkpoint['label_mapping']

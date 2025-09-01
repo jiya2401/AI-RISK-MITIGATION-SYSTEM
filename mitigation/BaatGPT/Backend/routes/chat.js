@@ -2,6 +2,7 @@
 import express from 'express';
 import axios from 'axios';
 import { generateText } from '../utils/openai.js';
+// ...existing code...
 
 const router = express.Router();
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:5000';

@@ -60,7 +60,7 @@ def load_trained_model(model_dir="../saved_medbert_model"):
     checkpoint_path = os.path.join(model_dir, "classifier_weights.pth")
     checkpoint = torch.load(checkpoint_path, map_location=device)
     
-    # Extract configuration
+    # Extract configuration 
     label_mapping = checkpoint['label_mapping']
     num_classes = checkpoint['num_classes']
     model_config = checkpoint['model_config']

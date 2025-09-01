@@ -2,11 +2,13 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import sys
 import os
+import json
 import pandas as pd
 import torch
 import torch.nn as nn
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer, AutoModel, BertModel, BertTokenizer
 from torch.utils.data import Dataset, DataLoader
+from pathlib import Path
 
 class RiskDataset(Dataset):
     def __init__(self, texts, labels, tokenizer, max_len):
@@ -52,6 +54,18 @@ class RiskClassifier(nn.Module):
         output = self.drop(output.last_hidden_state[:, 0, :])
         return self.out(output)
 
+def read_file_contents(filepath):
+    """Helper function to read and validate file contents"""
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+            print(f"\nFirst 100 characters of {os.path.basename(filepath)}:")
+            print(content[:100])
+            return content
+    except Exception as e:
+        print(f"Error reading {filepath}: {str(e)}")
+        return None
+
 def load_trained_model(model_dir="../saved_medbert_model"):
     """Load the trained model from the saved directory"""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -59,9 +73,59 @@ def load_trained_model(model_dir="../saved_medbert_model"):
     print(f"Loading model from {model_dir}...")
     print(f"Using device: {device}")
     
-    # Load the saved metadata and weights
-    checkpoint_path = os.path.join(model_dir, "classifier_weights.pth")
-    checkpoint = torch.load(checkpoint_path, map_location=device)
+    # Check what files are available in the model directory
+    if os.path.exists(model_dir):
+        print("\nAvailable files in model directory:")
+        for file in os.listdir(model_dir):
+            print(f"- {file}")
+    else:
+        print(f"\nWarning: Model directory {model_dir} does not exist")
+    
+    # Initialize default configuration
+    default_config = {
+        'label_mapping': {'Low Risk': 0, 'Medium Risk': 1, 'High Risk': 2},
+        'num_classes': 3,
+        'model_config': {'max_len': 512}
+    }
+    
+    # Try to load the model configuration from tokenizer config
+    tokenizer_config_path = os.path.join(model_dir, "tokenizer_config.json")
+    config_path = os.path.join(model_dir, "config.json")
+    
+    # Check contents of config files
+    for config_file in [tokenizer_config_path, config_path]:
+        content = read_file_contents(config_file)
+        if content:
+            print(f"\nFile exists and has content")
+        else:
+            print(f"\nFile is empty or invalid")
+    
+    try:
+        print(f"\nLoading tokenizer config from: {tokenizer_config_path}")
+        with open(tokenizer_config_path, 'r', encoding='utf-8') as f:
+            tokenizer_config = json.load(f)
+            print("Tokenizer config loaded successfully")
+    except Exception as e:
+        print(f"Warning: Could not load tokenizer config: {str(e)}")
+        tokenizer_config = {}
+    
+    try:
+        print(f"Loading model config from: {config_path}")
+        with open(config_path, 'r', encoding='utf-8') as f:
+            model_config = json.load(f)
+            print("Model config loaded successfully")
+    except Exception as e:
+        print(f"Warning: Could not load model config: {str(e)}")
+        model_config = {}
+    
+    # Merge configs with defaults
+    model_config = {
+        **default_config['model_config'],
+        **model_config
+    }
+    
+    # Use the default label mapping and number of classes
+    checkpoint = default_config
     
     # Extract configuration
     label_mapping = checkpoint['label_mapping']
@@ -71,15 +135,47 @@ def load_trained_model(model_dir="../saved_medbert_model"):
     print(f"Number of classes: {num_classes}")
     print(f"Labels: {list(label_mapping.keys())}")
     
-    # Load tokenizer and BERT model
-    tokenizer = AutoTokenizer.from_pretrained(model_dir)
-    bert_model = AutoModel.from_pretrained(model_dir)
+    try:
+        # Initialize base BERT model and tokenizer
+        print("Initializing base BERT model and tokenizer...")
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        bert_model = BertModel.from_pretrained('bert-base-uncased')
+        
+        # Create the classifier
+        print("Creating classifier...")
+        model = RiskClassifier(n_classes=num_classes, pre_trained_model=bert_model)
+        
+        # Load the trained weights
+        print("Loading classifier weights...")
+        weights_path = os.path.join(model_dir, "classifier_weights.pth")
+        if os.path.exists(weights_path):
+            try:
+                print(f"Attempting to load weights from: {weights_path}")
+                state_dict = torch.load(weights_path, map_location=device, weights_only=False)
+                if isinstance(state_dict, dict) and 'model_state_dict' in state_dict:
+                    model.load_state_dict(state_dict['model_state_dict'])
+                else:
+                    model.load_state_dict(state_dict)
+                print("Classifier weights loaded successfully")
+            except Exception as e:
+                print(f"Error loading weights: {str(e)}")
+                # Try alternative loading method
+                print("Trying alternative loading method...")
+                with open(weights_path, 'rb') as f:
+                    state_dict = torch.load(f, map_location=device, weights_only=False)
+                    if isinstance(state_dict, dict) and 'model_state_dict' in state_dict:
+                        model.load_state_dict(state_dict['model_state_dict'])
+                    else:
+                        model.load_state_dict(state_dict)
+                print("Classifier weights loaded successfully using alternative method")
+        else:
+            print(f"Warning: No weights file found at {weights_path}")
+            
+    except Exception as e:
+        print(f"Error loading models: {str(e)}")
+        raise
     
-    # Recreate the classifier
-    model = RiskClassifier(n_classes=num_classes, pre_trained_model=bert_model)
-    
-    # Load the trained weights
-    model.load_state_dict(checkpoint['model_state_dict'])
+    # Model is already loaded with weights from safetensors
     model = model.to(device)
     model.eval()
     

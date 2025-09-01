@@ -6,7 +6,7 @@ import mongoose from 'mongoose';
 import 'dotenv/config';
 import axios from 'axios';
 
-import chatRoutes from './Backend/routes/chat.js';
+import chatRoutes from './routes/chat.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;  // Changed to 3000 to avoid conflict with ML service

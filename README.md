@@ -3,9 +3,6 @@
 An AI-powered system designed to **monitor and mitigate risks** (**hallucinations, bias, unsafe outputs, fraud, and PII leakage**)in AI responses.   
 
 ## Features
-- ✅ AI Risk Detection (hallucinations, bias, fraud, unsafe content)  
-- ✅ Real-time monitoring of AI outputs  
-- ✅ Dashboard with scan results (dependency & security checks)  
 - ✅ MERN-based chat application  OpenAI API  (GPT-4O-MINI) + Python ML  
 
 ## Dashboard

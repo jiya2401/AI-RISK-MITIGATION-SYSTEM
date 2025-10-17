@@ -11,7 +11,6 @@ In future, there are **many updates planned** to make the system even more power
  ✅ Dashboard with scan results (dependency & security checks via **Pensar Console**)-✅ I will work to solve all issues as soon as possible.
 
 
-![Dashboard Screenshot](https://github.com/jiya2401/AI-RISK-MITIGATION-SYSTEM/blob/main/Screenshot%202025-09-01%20175822.png?raw=true) 
 ![Dashboard Screenshot](https://github.com/jiya2401/AI-RISK-MITIGATION-SYSTEM/blob/main/Screenshot%202025-09-02%20203847.png?raw=true)
 
 

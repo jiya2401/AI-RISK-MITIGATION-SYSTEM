@@ -1,10 +1,15 @@
 // Test route for UI testing without OpenAI
 import express from 'express';
+import axios from 'axios';
 
 const router = express.Router();
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
+const ML_TIMEOUT = 10000; // 10 seconds timeout
 
-// Mock OpenAI response for UI testing
+// Mock OpenAI response for UI testing with real ML analysis
 router.post('/test-ui', async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const { prompt } = req.body;
     if (!prompt) return res.status(400).json({ success: false, error: 'prompt is required' });
@@ -23,25 +28,49 @@ router.post('/test-ui', async (req, res) => {
       mockResponse += "I'd be happy to help you with that. Let me provide some information that might be useful for your situation. Perhaps you could provide more details about what specifically you're looking for?";
     }
 
-    // Always return success with mock ML flags
+    const openaiTime = Date.now() - startTime;
+
+    // Call real ML service for risk analysis
+    let mlFlags = { status: 'unavailable' };
+    const mlStartTime = Date.now();
+    
+    try {
+      const mlResp = await axios.post(
+        `${ML_SERVICE_URL}/analyze`,
+        { text: mockResponse },
+        { timeout: ML_TIMEOUT }
+      );
+
+      const mlTime = Date.now() - mlStartTime;
+      console.log(`[${new Date().toISOString()}] Test mode ML analysis completed in ${mlTime}ms`);
+      
+      mlFlags = {
+        hallucination_risk: mlResp.data.hallucination_risk,
+        bias_risk: mlResp.data.bias_risk,
+        toxicity_risk: mlResp.data.toxicity_risk,
+        pii_leak: mlResp.data.pii_leak,
+        fraud_risk: mlResp.data.fraud_risk,
+        confidence_score: mlResp.data.confidence_score,
+        summary: mlResp.data.summary,
+        processing_time_ms: mlResp.data.processing_time_ms,
+        status: 'success'
+      };
+    } catch (mlErr) {
+      console.error(`[${new Date().toISOString()}] Test mode ML service error:`, mlErr.message);
+      mlFlags = { status: 'unavailable', error: mlErr.message };
+    }
+
+    const totalTime = Date.now() - startTime;
+
     return res.json({
       success: true,
       reply: mockResponse,
       openai_output: mockResponse,
-      mlFlags: {
-        hallucination_risk: "MEDIUM",
-        bias_risk: "LOW",
-        toxicity_risk: "LOW",
-        pii_leak: prompt.toLowerCase().includes('email') || prompt.toLowerCase().includes('contact'),
-        fraud_risk: prompt.toLowerCase().includes('price') ? "HIGH" : "LOW",
-        confidence_score: 0.75,
-        processing_time_ms: 12.5,
-        status: 'success'
-      },
+      mlFlags: mlFlags,
       timing: {
-        openai_ms: 100,
-        ml_ms: 12.5,
-        total_ms: 112.5
+        openai_ms: openaiTime,
+        ml_ms: mlFlags.processing_time_ms || 0,
+        total_ms: totalTime
       }
     });
   } catch (err) {

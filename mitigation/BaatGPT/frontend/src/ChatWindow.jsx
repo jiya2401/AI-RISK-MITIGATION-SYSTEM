@@ -431,6 +431,28 @@ function ChatWindow() {
                       </div>
                     )}
                     
+                    {/* ML Summary */}
+                    {mlFlags.summary && (
+                      <div className="ml-summary" style={{
+                        marginTop: '12px',
+                        padding: '12px',
+                        background: 'rgba(99, 102, 241, 0.1)',
+                        border: '1px solid rgba(99, 102, 241, 0.2)',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        lineHeight: '1.5',
+                        color: 'inherit'
+                      }}>
+                        <div style={{display:'flex', alignItems:'center', marginBottom: '6px'}}>
+                          <i className="fas fa-info-circle" style={{marginRight: 6, color: '#6366f1'}}></i>
+                          <strong>Analysis Summary</strong>
+                        </div>
+                        <div style={{opacity: 0.9}}>
+                          {mlFlags.summary}
+                        </div>
+                      </div>
+                    )}
+                    
                     {/* Processing time */}
                     {mlFlags.processing_time_ms && (
                       <div className="ml-footer">

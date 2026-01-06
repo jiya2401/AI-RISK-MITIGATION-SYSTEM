@@ -57,6 +57,8 @@ class AnalysisResponse(BaseModel):
     fraud_risk: str
     confidence_score: float
     summary: str
+    engine_used: str
+    medbert_loaded: bool
     processing_time_ms: Optional[float] = None
 
 # MedBERT Model Classes
@@ -572,8 +574,10 @@ async def analyze(req: TextRequest):
         
         processing_time = (time.time() - start_time) * 1000  # Convert to ms
         
-        analysis_method = "MedBERT+heuristics" if medbert_risk else "heuristics"
-        logger.info(f"Analysis complete ({analysis_method}) in {processing_time:.1f}ms - "
+        # Determine engine used for this specific analysis
+        engine_used = "medbert+heuristics" if medbert_risk else "heuristics"
+        
+        logger.info(f"Analysis complete ({engine_used}) in {processing_time:.1f}ms - "
                    f"H:{hallucination_risk} B:{bias_risk} T:{toxicity_risk} "
                    f"P:{pii_leak} F:{fraud_risk} C:{confidence:.2f}")
         
@@ -585,6 +589,8 @@ async def analyze(req: TextRequest):
             fraud_risk=fraud_risk,
             confidence_score=round(confidence, 3),
             summary=summary,
+            engine_used=engine_used,
+            medbert_loaded=model_loaded,
             processing_time_ms=round(processing_time, 1)
         )
         

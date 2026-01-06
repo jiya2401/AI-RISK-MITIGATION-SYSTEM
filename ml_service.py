@@ -10,7 +10,6 @@ import re
 import logging
 import time
 from typing import Optional
-import hashlib
 
 # Configure logging
 logging.basicConfig(
@@ -26,10 +25,10 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Configure CORS
+# Configure CORS - for production, restrict to specific origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # TODO: In production, replace with specific origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -248,8 +247,9 @@ def calculate_confidence(text: str, risks: dict) -> float:
     confidence = min(base_confidence + length_bonus + consistency_bonus + pii_bonus, 0.98)
     
     # Add slight randomness based on text hash for natural variation
-    text_hash = int(hashlib.md5(text.encode()).hexdigest()[:8], 16)
-    variation = (text_hash % 10) / 100.0  # 0.00 to 0.09
+    # Using simple hash for non-security-critical variation
+    text_hash = abs(hash(text)) % 100
+    variation = text_hash / 1000.0  # 0.00 to 0.099
     
     return min(confidence + variation * 0.5, 0.99)
 

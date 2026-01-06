@@ -1,0 +1,14 @@
+# AI Risk Mitigation System - Python Requirements
+# ML Service Dependencies
+
+# Web Framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.5
+
+# ML/Deep Learning
+torch==2.5.1
+transformers==4.48.3
+
+# Utilities
+python-multipart==0.0.20

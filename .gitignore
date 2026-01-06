@@ -1,3 +1,28 @@
 node_modules
 .venv/
 .env/
+.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ML models (keep saved_medbert_model but exclude large training artifacts)
+*.pth.backup
+*.ckpt
+
+# Logs
+*.log

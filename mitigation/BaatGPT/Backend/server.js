@@ -9,8 +9,8 @@ import axios from 'axios';
 import chatRoutes from './routes/chat.js';
 
 const app = express();
-const PORT = process.env.PORT || 3000;  // Changed to 3000 to avoid conflict with ML service
-const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:5000';
+const PORT = process.env.PORT || 3000;
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
 
 // Configure CORS with specific options
 // Allow CORS from local dev servers (any localhost port) and common local origins

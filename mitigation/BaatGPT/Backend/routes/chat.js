@@ -2,10 +2,10 @@
 import express from 'express';
 import axios from 'axios';
 import { generateText } from '../utils/openai.js';
-// ...existing code...
 
 const router = express.Router();
-const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:5000';
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
+const ML_TIMEOUT = 10000; // 10 seconds timeout for ML service
 
 // Health proxy to the ML service
 router.get('/ml/health', async (req, res) => {
@@ -17,11 +17,15 @@ router.get('/ml/health', async (req, res) => {
   }
 });
 
-// User input -> OpenAI -> MedBERT risk
+// User input -> OpenAI -> ML Risk Analysis
 router.post('/thread', async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const { prompt } = req.body;
     if (!prompt) return res.status(400).json({ success: false, error: 'prompt is required' });
+
+    console.log(`[${new Date().toISOString()}] Processing prompt: ${prompt.substring(0, 50)}...`);
 
     // 1) Generate text with OpenAI
     const openaiOutput = await generateText(prompt);
@@ -30,26 +34,62 @@ router.post('/thread', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Failed to generate text from OpenAI' });
     }
 
-    // 2) Send generated text to the Flask MedBERT service
-    const mlResp = await axios.post(
-      `${ML_SERVICE_URL}/predict`,
-      { text: openaiOutput },
-      { timeout: 30000 }
-    );
+    const openaiTime = Date.now() - startTime;
+    console.log(`[${new Date().toISOString()}] OpenAI response received in ${openaiTime}ms`);
 
-    // 3) Return a consolidated response
+    // 2) Send generated text to ML service for risk analysis with timeout and fallback
+    let mlFlags = { status: 'unavailable' };
+    const mlStartTime = Date.now();
+    
+    try {
+      const mlResp = await axios.post(
+        `${ML_SERVICE_URL}/analyze`,
+        { text: openaiOutput },
+        { timeout: ML_TIMEOUT }
+      );
+
+      const mlTime = Date.now() - mlStartTime;
+      console.log(`[${new Date().toISOString()}] ML analysis completed in ${mlTime}ms`);
+      
+      // Map the ML response to our mlFlags format
+      mlFlags = {
+        hallucination_risk: mlResp.data.hallucination_risk,
+        bias_risk: mlResp.data.bias_risk,
+        toxicity_risk: mlResp.data.toxicity_risk,
+        pii_leak: mlResp.data.pii_leak,
+        fraud_risk: mlResp.data.fraud_risk,
+        confidence_score: mlResp.data.confidence_score,
+        processing_time_ms: mlResp.data.processing_time_ms,
+        status: 'success'
+      };
+    } catch (mlErr) {
+      // ML service failed or timed out - don't block the chat response
+      const mlTime = Date.now() - mlStartTime;
+      console.error(`[${new Date().toISOString()}] ML service error after ${mlTime}ms:`, mlErr.message);
+      mlFlags = { status: 'unavailable', error: mlErr.message };
+    }
+
+    // 3) Return combined response
+    const totalTime = Date.now() - startTime;
+    console.log(`[${new Date().toISOString()}] Total request time: ${totalTime}ms`);
+    
     return res.json({
       success: true,
+      reply: openaiOutput,
       openai_output: openaiOutput,
-      risk_prediction: mlResp.data.prediction,
-      risk_confidence: mlResp.data.confidence,
-      probabilities: mlResp.data.probabilities
+      mlFlags: mlFlags,
+      timing: {
+        openai_ms: openaiTime,
+        ml_ms: mlFlags.processing_time_ms || 0,
+        total_ms: totalTime
+      }
     });
   } catch (err) {
-    console.error('pipeline error:', err?.response?.data || err.message);
-    return res.status(502).json({
+    console.error('Pipeline error:', err?.response?.data || err.message);
+    return res.status(500).json({
       success: false,
-      error: 'Generation or risk scoring failed'
+      error: 'Generation or risk scoring failed',
+      details: err.message
     });
   }
 });
@@ -69,6 +109,8 @@ router.post('/thread/stream', async (req, res) => {
       return res.end();
     }
 
+    console.log(`[${new Date().toISOString()}] Streaming: Processing prompt`);
+
     // 1) Generate text with OpenAI
     const openaiOutput = await generateText(prompt);
     if (!openaiOutput) {
@@ -76,31 +118,50 @@ router.post('/thread/stream', async (req, res) => {
       return res.end();
     }
 
-    // send OpenAI output immediately
+    // Send OpenAI output immediately
+    console.log(`[${new Date().toISOString()}] Streaming: Sending OpenAI output`);
     res.write(`data: ${JSON.stringify({ type: 'openai', text: openaiOutput })}\n\n`);
 
-    // 2) Call ML service for risk scoring
-    const mlResp = await axios.post(
-      `${ML_SERVICE_URL}/predict`,
-      { text: openaiOutput },
-      { timeout: 30000 }
-    );
+    // 2) Call ML service for risk analysis with timeout and fallback
+    try {
+      const mlResp = await axios.post(
+        `${ML_SERVICE_URL}/analyze`,
+        { text: openaiOutput },
+        { timeout: ML_TIMEOUT }
+      );
 
-    // send ML flags
-    res.write(
-      `data: ${JSON.stringify({
-        type: 'ml',
-        prediction: mlResp.data.prediction,
-        confidence: mlResp.data.confidence,
-        probabilities: mlResp.data.probabilities
-      })}\n\n`
-    );
+      console.log(`[${new Date().toISOString()}] Streaming: ML analysis completed`);
+      
+      // Send ML flags
+      res.write(
+        `data: ${JSON.stringify({
+          type: 'ml',
+          mlFlags: {
+            hallucination_risk: mlResp.data.hallucination_risk,
+            bias_risk: mlResp.data.bias_risk,
+            toxicity_risk: mlResp.data.toxicity_risk,
+            pii_leak: mlResp.data.pii_leak,
+            fraud_risk: mlResp.data.fraud_risk,
+            confidence_score: mlResp.data.confidence_score,
+            status: 'success'
+          }
+        })}\n\n`
+      );
+    } catch (mlErr) {
+      console.error(`[${new Date().toISOString()}] Streaming: ML service error:`, mlErr.message);
+      res.write(
+        `data: ${JSON.stringify({
+          type: 'ml',
+          mlFlags: { status: 'unavailable', error: mlErr.message }
+        })}\n\n`
+      );
+    }
 
-    // done
+    // Done
     res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
     return res.end();
   } catch (err) {
-    console.error('stream pipeline error:', err?.response?.data || err?.message || err);
+    console.error('Stream pipeline error:', err?.response?.data || err?.message || err);
     res.write(`data: ${JSON.stringify({ type: 'error', message: 'Generation or scoring failed' })}\n\n`);
     return res.end();
   }

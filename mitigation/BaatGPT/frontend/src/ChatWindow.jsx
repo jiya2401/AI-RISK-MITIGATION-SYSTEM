@@ -28,6 +28,7 @@ function ChatWindow() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showMlPanel, setShowMlPanel] = useState(true);
   const [mlCollapsed, setMlCollapsed] = useState(false);
+  const [testMode, setTestMode] = useState(true); // Enable test mode by default for demo
 
   // Scroll to top functionality
   useEffect(() => {
@@ -55,7 +56,7 @@ function ChatWindow() {
 
   const getReply = async () => {
     if (!prompt.trim()) return;
-  setMlFlags(null);
+    setMlFlags(null);
     setLoading(true);
     setNewChat(false);
     
@@ -68,26 +69,31 @@ function ChatWindow() {
     };
 
     try {
-      // Use relative path so Vite dev server proxy forwards to backend (or set VITE_API_BASE_URL in production)
-      const response = await fetch(`/api/thread`, options);
+      // Use test endpoint when in test mode, otherwise use real API
+      const endpoint = testMode ? '/api/test-ui' : '/api/thread';
+      const response = await fetch(endpoint, options);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const res = await response.json();
-      console.log(res);
-      // backend returns openai_output and risk_prediction
-      const text = res.openai_output || res.reply || 'No reply';
+      console.log('API Response:', res);
+      
+      // Extract reply text
+      const text = res.reply || res.openai_output || 'No reply';
       setReply(text);
-      // show ML panel (placeholder) each time a new assistant output is produced
+      
+      // Show ML panel when we have a response
       setShowMlPanel(true);
-      // if backend included ML flags, show them immediately
-      if (res.risk_prediction || res.prediction || res.ml) {
-        const prediction = res.risk_prediction || res.prediction || (res.ml && res.ml.prediction);
-        const confidence = res.risk_confidence || res.confidence || (res.ml && res.ml.confidence) || 0;
-        const probabilities = res.probabilities || (res.ml && res.ml.probabilities) || null;
-        setMlFlags({ prediction, confidence, probabilities, note: res.note });
+      
+      // Process ML flags from the new backend format
+      if (res.mlFlags) {
+        setMlFlags(res.mlFlags);
+      } else {
+        // Fallback for unavailable ML service
+        setMlFlags({ status: 'unavailable' });
       }
     } catch(err) {
       console.error('Fetch error:', err);
       setReply("Sorry, I encountered an error. Please try again.");
+      setMlFlags({ status: 'error' });
     }
     
     setLoading(false);
@@ -130,14 +136,13 @@ function ChatWindow() {
             if (payload.type === 'openai') {
               assembledText = payload.text;
               setReply(assembledText);
-              // show ML panel (placeholder) when assistant text appears
               setShowMlPanel(true);
             } else if (payload.type === 'ml') {
-              setMlFlags({ prediction: payload.prediction, confidence: payload.confidence, probabilities: payload.probabilities });
-              // ensure panel is visible when ML flags arrive
+              setMlFlags(payload.mlFlags || { status: 'unavailable' });
               setShowMlPanel(true);
             } else if (payload.type === 'error') {
               setReply('Error: ' + payload.message);
+              setMlFlags({ status: 'error' });
             }
           } catch (e) {
             console.error('stream parse error', e, line);
@@ -148,6 +153,7 @@ function ChatWindow() {
     } catch (err) {
       console.error('Stream fetch error', err);
       setReply('Sorry, streaming failed.');
+      setMlFlags({ status: 'error' });
     }
 
     setLoading(false);
@@ -196,6 +202,19 @@ function ChatWindow() {
             <i className="fas fa-bars"></i>
           </button>
           <span>स्पष्टGPT</span>
+          {testMode && (
+            <span style={{
+              marginLeft: '10px',
+              padding: '4px 8px',
+              background: 'rgba(251, 191, 36, 0.2)',
+              border: '1px solid rgba(251, 191, 36, 0.4)',
+              borderRadius: '4px',
+              fontSize: '11px',
+              color: '#fbbf24'
+            }}>
+              DEMO MODE
+            </span>
+          )}
         </div>
         <div className="navbar-right">
           <button 
@@ -311,48 +330,114 @@ function ChatWindow() {
       {showMlPanel && (
         <div className={"ml-flags-panel" + (mlCollapsed ? ' collapsed' : '')} role="status" aria-live="polite">
           {mlCollapsed ? (
-            <div className="collapsed-icon" title="Expand ML flags" onClick={() => setMlCollapsed(false)}>⚑</div>
+            <div className="collapsed-icon" title="Expand ML Risk Analysis" onClick={() => setMlCollapsed(false)}>
+              <i className="fas fa-shield-alt"></i>
+            </div>
           ) : (
             <>
-              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '12px'}}>
                 <div className="panel-row">
-                  <strong style={{fontSize:14}}>ML Flags</strong>
+                  <i className="fas fa-shield-alt" style={{marginRight: 8}}></i>
+                  <strong style={{fontSize:15}}>AI Risk Analysis</strong>
                 </div>
                 <div style={{display:'flex', gap:8}}>
                   <button type="button" className="stream-toggle" onClick={() => setMlCollapsed(true)} title="Collapse">‒</button>
                   <button type="button" className="stream-toggle" onClick={() => setShowMlPanel(false)} title="Hide">✕</button>
                 </div>
               </div>
-              <div style={{marginTop:10}}>
-                {mlFlags ? (
-                  <div>
-                    {mlFlags.prediction === 'hallucination' ? (
-                      <div className="hallucination-warning">
-                        <strong>Hallucination detected</strong>
-                        <div>Confidence: {mlFlags.confidence.toFixed(3)}</div>
-                        <div style={{marginTop:8}}>{mlFlags.note || 'The model flagged this output as potentially misleading.'}</div>
+              <div>
+                {!mlFlags || mlFlags.status === 'loading' ? (
+                  <div className="ml-loading">
+                    <div className="spinner"></div>
+                    <span style={{marginLeft: 8}}>Analyzing risks...</span>
+                  </div>
+                ) : mlFlags.status === 'unavailable' ? (
+                  <div className="ml-unavailable">
+                    <i className="fas fa-exclamation-triangle" style={{marginRight: 8}}></i>
+                    <span>ML service unavailable</span>
+                  </div>
+                ) : mlFlags.status === 'error' ? (
+                  <div className="ml-error">
+                    <i className="fas fa-times-circle" style={{marginRight: 8}}></i>
+                    <span>Analysis failed</span>
+                  </div>
+                ) : (
+                  <div className="ml-flags-content">
+                    {/* Check if all risks are low */}
+                    {mlFlags.hallucination_risk === 'LOW' && 
+                     mlFlags.bias_risk === 'LOW' && 
+                     mlFlags.toxicity_risk === 'LOW' && 
+                     mlFlags.fraud_risk === 'LOW' && 
+                     !mlFlags.pii_leak ? (
+                      <div className="no-risk-detected">
+                        <i className="fas fa-check-circle" style={{color: '#10b981', marginRight: 8}}></i>
+                        <span>No significant risks detected</span>
                       </div>
                     ) : (
-                      <div>
-                        <div className="flag-row">
-                          {mlFlags.probabilities ? (
-                            Object.entries(mlFlags.probabilities)
-                              .sort((a,b)=>b[1]-a[1])
-                              .map(([k,v],i)=> (
-                                <span key={k} className={"flag-badge flag-"+k + (k===mlFlags.prediction? ' flag-main':'') } title={`${k}: ${(v*100).toFixed(1)}%`}>
-                                  {k} · {(v*100).toFixed(1)}%
-                                </span>
-                              ))
-                          ) : (
-                            <span className={"flag-badge flag-" + (mlFlags.prediction || 'bias') + ' flag-main'}>{mlFlags.prediction} · {(mlFlags.confidence*100).toFixed(1)}%</span>
-                          )}
+                      <div className="risk-flags-grid">
+                        {/* Hallucination Risk */}
+                        <div className={`risk-flag risk-${mlFlags.hallucination_risk?.toLowerCase()}`} title="AI may have generated false or unverified information">
+                          <div className="risk-flag-header">
+                            <i className="fas fa-brain"></i>
+                            <span className="risk-label">Hallucination</span>
+                          </div>
+                          <span className="risk-value">{mlFlags.hallucination_risk}</span>
                         </div>
-                        <div style={{marginTop:8,fontSize:12,opacity:0.9}}>Confidence: {(mlFlags.confidence * 100).toFixed(1)}%</div>
+
+                        {/* Bias Risk */}
+                        <div className={`risk-flag risk-${mlFlags.bias_risk?.toLowerCase()}`} title="Response may contain biased language or perspectives">
+                          <div className="risk-flag-header">
+                            <i className="fas fa-balance-scale"></i>
+                            <span className="risk-label">Bias</span>
+                          </div>
+                          <span className="risk-value">{mlFlags.bias_risk}</span>
+                        </div>
+
+                        {/* Toxicity Risk */}
+                        <div className={`risk-flag risk-${mlFlags.toxicity_risk?.toLowerCase()}`} title="Response may contain harmful or offensive content">
+                          <div className="risk-flag-header">
+                            <i className="fas fa-exclamation-triangle"></i>
+                            <span className="risk-label">Toxicity</span>
+                          </div>
+                          <span className="risk-value">{mlFlags.toxicity_risk}</span>
+                        </div>
+
+                        {/* Fraud Risk */}
+                        <div className={`risk-flag risk-${mlFlags.fraud_risk?.toLowerCase()}`} title="Response may contain suspicious or fraudulent patterns">
+                          <div className="risk-flag-header">
+                            <i className="fas fa-user-secret"></i>
+                            <span className="risk-label">Fraud</span>
+                          </div>
+                          <span className="risk-value">{mlFlags.fraud_risk}</span>
+                        </div>
+
+                        {/* PII Leak */}
+                        <div className={`risk-flag risk-${mlFlags.pii_leak ? 'high' : 'low'}`} title="Response may contain personally identifiable information">
+                          <div className="risk-flag-header">
+                            <i className="fas fa-user-lock"></i>
+                            <span className="risk-label">PII Leak</span>
+                          </div>
+                          <span className="risk-value">{mlFlags.pii_leak ? 'YES' : 'NO'}</span>
+                        </div>
+
+                        {/* Confidence Score */}
+                        <div className="risk-flag confidence-score" title="ML model confidence in the analysis">
+                          <div className="risk-flag-header">
+                            <i className="fas fa-chart-line"></i>
+                            <span className="risk-label">Confidence</span>
+                          </div>
+                          <span className="risk-value">{(mlFlags.confidence_score * 100).toFixed(0)}%</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Processing time */}
+                    {mlFlags.processing_time_ms && (
+                      <div className="ml-footer">
+                        <small>Analysis completed in {mlFlags.processing_time_ms.toFixed(0)}ms</small>
                       </div>
                     )}
                   </div>
-                ) : (
-                  <div className="ml-empty">ML flags will appear here when available</div>
                 )}
               </div>
             </>

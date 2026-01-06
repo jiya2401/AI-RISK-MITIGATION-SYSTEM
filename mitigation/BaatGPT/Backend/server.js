@@ -7,10 +7,11 @@ import 'dotenv/config';
 import axios from 'axios';
 
 import chatRoutes from './routes/chat.js';
+import testRoutes from './routes/test.js';
 
 const app = express();
-const PORT = process.env.PORT || 3000;  // Changed to 3000 to avoid conflict with ML service
-const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:5000';
+const PORT = process.env.PORT || 3000;
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
 
 // Configure CORS with specific options
 // Allow CORS from local dev servers (any localhost port) and common local origins
@@ -39,6 +40,7 @@ async function startServer() {
 
     // Mount API routes
     app.use('/api', chatRoutes);  // This mounts all chat routes under /api prefix
+    app.use('/api', testRoutes);  // Test routes for UI testing without OpenAI
     
     // Basic root status
     app.get('/', (_req, res) => res.json({ ok: true, api: '/api', ml: ML_SERVICE_URL }));

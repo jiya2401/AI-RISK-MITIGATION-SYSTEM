@@ -1,7 +1,7 @@
 """
 AI Risk Mitigation ML Service
 Production-grade FastAPI service for analyzing AI-generated text
-Uses intelligent heuristics for comprehensive risk analysis
+Uses MedBERT model with fallback to intelligent heuristics
 """
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +10,18 @@ import re
 import logging
 import time
 from typing import Optional
+import os
+
+# Try to import ML dependencies
+try:
+    import torch
+    import torch.nn as nn
+    from transformers import BertTokenizer, BertModel
+    ML_AVAILABLE = True
+except ImportError:
+    ML_AVAILABLE = False
+    logger_temp = logging.getLogger(__name__)
+    logger_temp.warning("ML dependencies not available, will use heuristics only")
 
 # Configure logging
 logging.basicConfig(
@@ -46,6 +58,157 @@ class AnalysisResponse(BaseModel):
     confidence_score: float
     summary: str
     processing_time_ms: Optional[float] = None
+
+# MedBERT Model Classes
+if ML_AVAILABLE:
+    class RiskClassifier(nn.Module):
+        """MedBERT-based risk classifier"""
+        def __init__(self, n_classes, pre_trained_model):
+            super(RiskClassifier, self).__init__()
+            self.bert = pre_trained_model
+            self.drop = nn.Dropout(p=0.3)
+            self.out = nn.Linear(self.bert.config.hidden_size, n_classes)
+
+        def forward(self, input_ids, attention_mask):
+            output = self.bert(input_ids=input_ids, attention_mask=attention_mask)
+            output = self.drop(output.last_hidden_state[:, 0, :])
+            return self.out(output)
+
+# Global model variables
+medbert_model = None
+tokenizer = None
+device = None
+label_mapping = None
+max_len = 512
+model_loaded = False
+
+def load_medbert_model(model_dir="saved_medbert_model"):
+    """Load MedBERT model at startup"""
+    global medbert_model, tokenizer, device, label_mapping, max_len, model_loaded
+    
+    if not ML_AVAILABLE:
+        logger.warning("ML dependencies not available, using heuristics only")
+        return False
+    
+    try:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        logger.info(f"Loading MedBERT model from {model_dir} on device: {device}")
+        
+        # Check if model directory exists
+        if not os.path.exists(model_dir):
+            logger.warning(f"Model directory {model_dir} not found, using heuristics")
+            return False
+        
+        # Try to load checkpoint
+        checkpoint_path = os.path.join(model_dir, "classifier_weights.pth")
+        if not os.path.exists(checkpoint_path):
+            logger.warning(f"Checkpoint file not found at {checkpoint_path}, using heuristics")
+            return False
+        
+        # Check if checkpoint is a valid file (not Git LFS pointer)
+        file_size = os.path.getsize(checkpoint_path)
+        if file_size < 1000:  # If file is very small, likely a Git LFS pointer
+            logger.warning(f"Checkpoint appears to be a Git LFS pointer ({file_size} bytes), using heuristics")
+            return False
+        
+        # Load checkpoint
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        
+        # Extract configuration
+        label_mapping = checkpoint.get('label_mapping', {'Low Risk': 0, 'Medium Risk': 1, 'High Risk': 2})
+        num_classes = checkpoint.get('num_classes', 3)
+        model_config = checkpoint.get('model_config', {'max_len': 512})
+        max_len = model_config.get('max_len', 512)
+        
+        logger.info(f"Number of classes: {num_classes}")
+        logger.info(f"Labels: {list(label_mapping.keys())}")
+        
+        # Try to load tokenizer from local directory
+        try:
+            tokenizer = BertTokenizer.from_pretrained(model_dir, local_files_only=True)
+            logger.info("Loaded tokenizer from local directory")
+        except Exception as e:
+            logger.warning(f"Could not load tokenizer from local directory: {e}")
+            # Try loading from saved vocab.txt
+            vocab_path = os.path.join(model_dir, "vocab.txt")
+            if os.path.exists(vocab_path) and os.path.getsize(vocab_path) > 1000:
+                tokenizer = BertTokenizer(vocab_file=vocab_path)
+                logger.info("Loaded tokenizer from vocab.txt")
+            else:
+                logger.warning("Could not load tokenizer, using heuristics")
+                return False
+        
+        # Try to load BERT model
+        try:
+            bert_model = BertModel.from_pretrained(model_dir, local_files_only=True)
+            logger.info("Loaded BERT model from local directory")
+        except Exception as e:
+            logger.warning(f"Could not load BERT model: {e}, using heuristics")
+            return False
+        
+        # Create classifier
+        medbert_model = RiskClassifier(n_classes=num_classes, pre_trained_model=bert_model)
+        
+        # Load trained weights
+        if 'model_state_dict' in checkpoint:
+            medbert_model.load_state_dict(checkpoint['model_state_dict'])
+            logger.info("Loaded trained classifier weights")
+        else:
+            medbert_model.load_state_dict(checkpoint)
+            logger.info("Loaded trained classifier weights (alternative format)")
+        
+        medbert_model = medbert_model.to(device)
+        medbert_model.eval()
+        
+        logger.info("✅ MedBERT model loaded successfully!")
+        model_loaded = True
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to load MedBERT model: {e}")
+        logger.info("Will use heuristic-based analysis as fallback")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def predict_with_medbert(text: str):
+    """Make prediction using MedBERT model"""
+    if not model_loaded or medbert_model is None or tokenizer is None:
+        return None, None, None
+    
+    try:
+        medbert_model.eval()
+        reverse_label_mapping = {v: k for k, v in label_mapping.items()}
+        
+        # Prepare input
+        encoding = tokenizer.encode_plus(
+            text,
+            add_special_tokens=True,
+            max_length=max_len,
+            return_token_type_ids=False,
+            padding='max_length',
+            truncation=True,
+            return_attention_mask=True,
+            return_tensors='pt',
+        )
+        
+        input_ids = encoding['input_ids'].to(device)
+        attention_mask = encoding['attention_mask'].to(device)
+        
+        # Make prediction
+        with torch.no_grad():
+            outputs = medbert_model(input_ids=input_ids, attention_mask=attention_mask)
+            probabilities = torch.softmax(outputs, dim=1)
+            _, prediction = torch.max(outputs, dim=1)
+            confidence = probabilities[0][prediction].item()
+        
+        predicted_label = reverse_label_mapping.get(prediction.item(), "Medium Risk")
+        
+        return predicted_label, confidence, probabilities[0].cpu().numpy()
+        
+    except Exception as e:
+        logger.error(f"MedBERT prediction error: {e}")
+        return None, None, None
 
 def detect_pii(text: str) -> bool:
     """Detect personally identifiable information using regex patterns"""
@@ -295,8 +458,15 @@ def generate_summary(hallucination_risk: str, bias_risk: str, toxicity_risk: str
 @app.on_event("startup")
 async def startup_event():
     """Initialize service on startup"""
-    logger.info("🚀 AI Risk Mitigation ML Service started successfully!")
-    logger.info("📊 Using advanced heuristic-based risk analysis")
+    logger.info("🚀 AI Risk Mitigation ML Service starting...")
+    
+    # Try to load MedBERT model
+    if load_medbert_model():
+        logger.info("✅ MedBERT model loaded successfully!")
+        logger.info("📊 Using MedBERT + heuristics for comprehensive risk analysis")
+    else:
+        logger.info("📊 Using heuristic-based risk analysis (MedBERT not available)")
+    
     logger.info("✅ Service ready to analyze AI-generated content")
 
 @app.get("/")
@@ -306,22 +476,23 @@ def health():
         "status": "ok",
         "service": "ml-risk-engine",
         "version": "1.0.0",
-        "engine": "heuristic-based",
+        "engine": "medbert+heuristics" if model_loaded else "heuristic-based",
+        "medbert_loaded": model_loaded,
         "ready": True
     }
 
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze(req: TextRequest):
     """
-    Analyze AI-generated text for various risk factors
+    Analyze AI-generated text for various risk factors using MedBERT + heuristics
     
     Returns comprehensive risk assessment including:
-    - hallucination_risk: LOW/MEDIUM/HIGH - Detects unverified claims
-    - bias_risk: LOW/MEDIUM/HIGH - Detects biased language
-    - toxicity_risk: LOW/MEDIUM/HIGH - Detects offensive content
-    - pii_leak: bool - Detects personally identifiable information
-    - fraud_risk: LOW/MEDIUM/HIGH - Detects fraud indicators
-    - confidence_score: 0.0-1.0 - Analysis confidence
+    - hallucination_risk: LOW/MEDIUM/HIGH - MedBERT prediction or heuristic detection
+    - bias_risk: LOW/MEDIUM/HIGH - Derived from MedBERT or heuristic detection
+    - toxicity_risk: LOW/MEDIUM/HIGH - Heuristic detection
+    - pii_leak: bool - Regex-based PII detection
+    - fraud_risk: LOW/MEDIUM/HIGH - Heuristic fraud detection
+    - confidence_score: 0.0-1.0 - Model confidence or analysis confidence
     - summary: Human-readable explanation
     """
     start_time = time.time()
@@ -332,9 +503,43 @@ async def analyze(req: TextRequest):
         
         text = req.text.strip()
         
-        # Run all analyses
-        hallucination_risk, hall_conf = detect_hallucination(text)
-        bias_risk = detect_bias(text)
+        # Try MedBERT prediction first if model is loaded
+        medbert_risk = None
+        medbert_confidence = None
+        medbert_probs = None
+        
+        if model_loaded:
+            medbert_risk, medbert_confidence, medbert_probs = predict_with_medbert(text)
+            if medbert_risk:
+                logger.info(f"MedBERT prediction: {medbert_risk} (confidence: {medbert_confidence:.3f})")
+        
+        # Map MedBERT risk to hallucination risk if available
+        if medbert_risk:
+            if medbert_risk == "High Risk":
+                hallucination_risk = "HIGH"
+                base_confidence = medbert_confidence
+            elif medbert_risk == "Medium Risk":
+                hallucination_risk = "MEDIUM"
+                base_confidence = medbert_confidence
+            else:  # Low Risk
+                hallucination_risk = "LOW"
+                base_confidence = medbert_confidence
+            
+            # Derive bias risk from MedBERT probabilities
+            bias_risk = "LOW"
+            if medbert_probs is not None and len(medbert_probs) > 1:
+                sorted_probs = sorted(medbert_probs, reverse=True)
+                # If second highest probability is high, suggests uncertainty/bias
+                if sorted_probs[1] > 0.35:
+                    bias_risk = "MEDIUM"
+                if sorted_probs[1] > 0.45:
+                    bias_risk = "HIGH"
+        else:
+            # Fallback to heuristic detection
+            hallucination_risk, base_confidence = detect_hallucination(text)
+            bias_risk = detect_bias(text)
+        
+        # Always run heuristic detections for toxicity, PII, and fraud
         toxicity_risk = detect_toxicity(text)
         pii_leak = detect_pii(text)
         fraud_risk = detect_fraud(text)
@@ -348,8 +553,16 @@ async def analyze(req: TextRequest):
             'pii_leak': pii_leak
         }
         
-        # Calculate overall confidence
-        confidence = calculate_confidence(text, risks)
+        # Calculate overall confidence (use MedBERT confidence if available)
+        if medbert_confidence:
+            # Adjust MedBERT confidence based on other factors
+            confidence = medbert_confidence
+            if pii_leak:
+                confidence = min(confidence + 0.05, 0.99)
+            if toxicity_risk == "HIGH" or fraud_risk == "HIGH":
+                confidence = min(confidence + 0.03, 0.99)
+        else:
+            confidence = calculate_confidence(text, risks)
         
         # Generate summary
         summary = generate_summary(
@@ -359,7 +572,8 @@ async def analyze(req: TextRequest):
         
         processing_time = (time.time() - start_time) * 1000  # Convert to ms
         
-        logger.info(f"Analysis complete in {processing_time:.1f}ms - "
+        analysis_method = "MedBERT+heuristics" if medbert_risk else "heuristics"
+        logger.info(f"Analysis complete ({analysis_method}) in {processing_time:.1f}ms - "
                    f"H:{hallucination_risk} B:{bias_risk} T:{toxicity_risk} "
                    f"P:{pii_leak} F:{fraud_risk} C:{confidence:.2f}")
         
@@ -378,4 +592,6 @@ async def analyze(req: TextRequest):
         raise
     except Exception as e:
         logger.error(f"Analysis error: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")

@@ -28,6 +28,7 @@ function ChatWindow() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showMlPanel, setShowMlPanel] = useState(true);
   const [mlCollapsed, setMlCollapsed] = useState(false);
+  const [testMode, setTestMode] = useState(true); // Enable test mode by default for demo
 
   // Scroll to top functionality
   useEffect(() => {
@@ -68,8 +69,9 @@ function ChatWindow() {
     };
 
     try {
-      // Use relative path so Vite dev server proxy forwards to backend
-      const response = await fetch(`/api/thread`, options);
+      // Use test endpoint when in test mode, otherwise use real API
+      const endpoint = testMode ? '/api/test-ui' : '/api/thread';
+      const response = await fetch(endpoint, options);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const res = await response.json();
       console.log('API Response:', res);
@@ -200,6 +202,19 @@ function ChatWindow() {
             <i className="fas fa-bars"></i>
           </button>
           <span>स्पष्टGPT</span>
+          {testMode && (
+            <span style={{
+              marginLeft: '10px',
+              padding: '4px 8px',
+              background: 'rgba(251, 191, 36, 0.2)',
+              border: '1px solid rgba(251, 191, 36, 0.4)',
+              borderRadius: '4px',
+              fontSize: '11px',
+              color: '#fbbf24'
+            }}>
+              DEMO MODE
+            </span>
+          )}
         </div>
         <div className="navbar-right">
           <button 

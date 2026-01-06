@@ -7,6 +7,7 @@ import 'dotenv/config';
 import axios from 'axios';
 
 import chatRoutes from './routes/chat.js';
+import testRoutes from './routes/test.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -39,6 +40,7 @@ async function startServer() {
 
     // Mount API routes
     app.use('/api', chatRoutes);  // This mounts all chat routes under /api prefix
+    app.use('/api', testRoutes);  // Test routes for UI testing without OpenAI
     
     // Basic root status
     app.get('/', (_req, res) => res.json({ ok: true, api: '/api', ml: ML_SERVICE_URL }));

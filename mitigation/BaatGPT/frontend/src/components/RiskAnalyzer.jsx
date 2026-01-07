@@ -50,12 +50,6 @@ export default function RiskAnalyzer() {
     }
   };
 
-  const resetForm = () => {
-    setText('');
-    setResults(null);
-    setError(null);
-  };
-
   return (
     <div className="min-h-screen bg-dark-bg text-white">
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
@@ -70,36 +64,34 @@ export default function RiskAnalyzer() {
         </div>
 
         {/* Input Section */}
-        {!results && (
-          <div className="max-w-3xl mx-auto mb-8 animate-slide-up">
-            <div className="bg-dark-card border border-dark-border rounded-lg p-6 shadow-xl">
-              <label htmlFor="text-input" className="block text-gray-300 font-medium mb-3">
-                Enter AI-generated content for analysis:
-              </label>
-              <textarea
-                id="text-input"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Paste your AI-generated text here..."
-                className="w-full h-48 bg-dark-bg border border-dark-border rounded-lg p-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent resize-none"
-                disabled={loading}
-              />
-              <div className="flex items-center justify-between mt-4">
-                <span className="text-sm text-gray-500">
-                  {text.length} characters • Press Ctrl+Enter to analyze
-                </span>
-                <button
-                  onClick={analyzeRisk}
-                  disabled={loading || !text.trim()}
-                  className="px-6 py-3 bg-gradient-to-r from-accent-blue to-accent-purple text-white font-semibold rounded-lg hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:ring-offset-2 focus:ring-offset-dark-bg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105"
-                >
-                  {loading ? 'Analyzing...' : 'Analyze Risk'}
-                </button>
-              </div>
+        <div className="max-w-3xl mx-auto mb-8 animate-slide-up">
+          <div className="bg-dark-card border border-dark-border rounded-lg p-6 shadow-xl">
+            <label htmlFor="text-input" className="block text-gray-300 font-medium mb-3">
+              Enter AI-generated content for analysis:
+            </label>
+            <textarea
+              id="text-input"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Paste your AI-generated text here..."
+              className="w-full h-48 bg-dark-bg border border-dark-border rounded-lg p-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent resize-none"
+              disabled={loading}
+            />
+            <div className="flex items-center justify-between mt-4">
+              <span className="text-sm text-gray-500">
+                {text.length} characters • Press Ctrl+Enter to analyze
+              </span>
+              <button
+                onClick={analyzeRisk}
+                disabled={loading || !text.trim()}
+                className="px-6 py-3 bg-gradient-to-r from-accent-blue to-accent-purple text-white font-semibold rounded-lg hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-accent-blue focus:ring-offset-2 focus:ring-offset-dark-bg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105"
+              >
+                {loading ? 'Analyzing...' : 'Analyze Risk'}
+              </button>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Loading State */}
         {loading && (
@@ -120,17 +112,7 @@ export default function RiskAnalyzer() {
 
         {/* Results Dashboard */}
         {results && !loading && (
-          <div className="animate-fade-in">
-            {/* Action Buttons */}
-            <div className="max-w-7xl mx-auto mb-6 flex justify-end">
-              <button
-                onClick={resetForm}
-                className="px-4 py-2 bg-dark-card border border-dark-border text-gray-300 rounded-lg hover:border-accent-blue transition-colors"
-              >
-                ← New Analysis
-              </button>
-            </div>
-
+          <div className="max-w-7xl mx-auto animate-fade-in">
             {/* Risk Cards Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
               <ResultCard title="Hallucination Risk" value={results.hallucination_risk} type="risk" />
@@ -160,7 +142,7 @@ export default function RiskAnalyzer() {
             </div>
 
             {/* Metadata */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
               <ResultCard title="Engine Used" value={results.engine_used || 'heuristics'} type="text" />
               <ResultCard 
                 title="Processing Time" 
@@ -168,24 +150,9 @@ export default function RiskAnalyzer() {
                 type="text" 
               />
             </div>
-
-            {/* Analyzed Text */}
-            <div className="mt-6 bg-dark-card border border-dark-border rounded-lg p-6">
-              <h3 className="text-gray-400 text-sm font-medium mb-3">Analyzed Text</h3>
-              <div className="bg-dark-bg border border-dark-border rounded-lg p-4 max-h-48 overflow-y-auto">
-                <p className="text-gray-300 text-sm whitespace-pre-wrap">{text}</p>
-              </div>
-            </div>
           </div>
         )}
 
-        {/* Empty State */}
-        {!results && !loading && !error && (
-          <div className="max-w-3xl mx-auto text-center text-gray-500 mt-12">
-            <div className="text-6xl mb-4">🛡️</div>
-            <p className="text-lg">Enter AI-generated content above to begin risk analysis</p>
-          </div>
-        )}
       </div>
 
       {/* Footer */}

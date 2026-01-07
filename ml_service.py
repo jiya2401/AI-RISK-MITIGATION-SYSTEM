@@ -32,9 +32,36 @@ logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="AI Risk Mitigation ML Service",
-    description="Real-time ML-powered risk analysis for AI-generated content",
-    version="1.0.0"
+    title="AI Risk Mitigation System",
+    description="""
+    **Production-Grade ML Engine for AI Safety & Risk Analysis**
+    
+    This service provides comprehensive real-time risk assessment for AI-generated content,
+    combining state-of-the-art ML models with rule-based heuristics for robust detection.
+    
+    **Capabilities:**
+    - Hallucination Detection (identifies false or unverified claims)
+    - Bias Analysis (detects unfair or skewed perspectives)
+    - Toxicity Screening (flags harmful or offensive content)
+    - PII Leak Detection (identifies personal information)
+    - Fraud Pattern Recognition (detects deceptive tactics)
+    
+    **Engine Architecture:**
+    - Primary: MedBERT (medical domain fine-tuned BERT)
+    - Fallback: Rule-based heuristic analysis
+    - Mode: Graceful degradation with no service interruption
+    
+    **Use Cases:**
+    - Content moderation for AI chatbots
+    - Automated content safety screening
+    - Compliance checking for AI-generated text
+    - Real-time risk flagging in production systems
+    """,
+    version="1.0.0",
+    contact={
+        "name": "AI Risk Mitigation System",
+        "url": "https://github.com/jiya2401/AI-RISK-MITIGATION-SYSTEM"
+    }
 )
 
 # Configure CORS - for production, restrict to specific origins
@@ -424,78 +451,130 @@ def generate_summary(hallucination_risk: str, bias_risk: str, toxicity_risk: str
     risks = []
     
     if hallucination_risk == "HIGH":
-        risks.append("high hallucination risk (unverified claims or excessive certainty)")
+        risks.append("high hallucination risk detected (unverified claims or excessive certainty)")
     elif hallucination_risk == "MEDIUM":
         risks.append("moderate hallucination risk (some unsupported statements)")
     
     if bias_risk == "HIGH":
-        risks.append("significant bias (absolute statements or loaded language)")
+        risks.append("significant bias indicators (absolute statements or loaded language)")
     elif bias_risk == "MEDIUM":
-        risks.append("some bias detected")
+        risks.append("some bias patterns detected")
     
     if toxicity_risk == "HIGH":
-        risks.append("toxic or offensive content")
+        risks.append("toxic or offensive language present")
     elif toxicity_risk == "MEDIUM":
-        risks.append("potentially offensive language")
+        risks.append("potentially offensive language detected")
     
     if pii_leak:
-        risks.append("personally identifiable information detected (emails, phone numbers, or similar)")
+        risks.append("personally identifiable information detected (e.g., emails, phone numbers, SSN)")
     
     if fraud_risk == "HIGH":
-        risks.append("multiple fraud indicators (urgent language, guarantees, or pressure tactics)")
+        risks.append("multiple fraud indicators present (urgent language, guarantees, or pressure tactics)")
     elif fraud_risk == "MEDIUM":
-        risks.append("some fraud-related patterns")
+        risks.append("some fraud-related patterns detected")
     
     if not risks:
-        return f"Analysis complete. Content appears safe and appropriate with no significant risks detected. Model confidence: {confidence:.1%}."
+        return f"✓ Content analysis complete. No significant risks detected. This AI-generated content appears safe and appropriate for use. Confidence: {confidence:.1%}."
     elif len(risks) == 1:
-        return f"Analysis identified {risks[0]}. Content review recommended. Model confidence: {confidence:.1%}."
+        return f"⚠ Risk identified: {risks[0]}. Human review recommended before deployment. Confidence: {confidence:.1%}."
     elif len(risks) == 2:
-        return f"Analysis identified {risks[0]} and {risks[1]}. Careful review recommended. Model confidence: {confidence:.1%}."
+        return f"⚠ Multiple risks detected: {risks[0]}, and {risks[1]}. Careful human review strongly recommended. Confidence: {confidence:.1%}."
     else:
-        # Multiple risks
+        # Multiple risks - critical review needed
         risk_list = ", ".join(risks[:-1]) + f", and {risks[-1]}"
-        return f"Multiple concerns detected: {risk_list}. Thorough content review strongly recommended. Model confidence: {confidence:.1%}."
+        return f"⚠ Critical: Multiple risk factors identified including {risk_list}. Thorough content review and editing required before use. Confidence: {confidence:.1%}."
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize service on startup"""
-    logger.info("🚀 AI Risk Mitigation ML Service starting...")
+    logger.info("=" * 60)
+    logger.info("🚀 AI Risk Mitigation ML Service - Production Engine")
+    logger.info("=" * 60)
     
     # Try to load MedBERT model
-    if load_medbert_model():
-        logger.info("✅ MedBERT model loaded successfully!")
-        logger.info("📊 Using MedBERT + heuristics for comprehensive risk analysis")
-    else:
-        logger.info("📊 Using heuristic-based risk analysis (MedBERT not available)")
+    medbert_success = load_medbert_model()
     
-    logger.info("✅ Service ready to analyze AI-generated content")
+    if medbert_success:
+        logger.info("✅ ENGINE: MedBERT + Heuristics (HYBRID MODE)")
+        logger.info("   → MedBERT: Hallucination & Bias detection")
+        logger.info("   → Heuristics: Toxicity, PII, Fraud detection")
+    else:
+        logger.info("⚠️  ENGINE: Heuristics Only (MedBERT unavailable)")
+        logger.info("   → Using rule-based analysis for all risk categories")
+        logger.info("   → Production-grade fallback active")
+    
+    logger.info("=" * 60)
+    logger.info("✅ Service operational - Ready to analyze content")
+    logger.info(f"📊 Engine Mode: {'HYBRID' if medbert_success else 'HEURISTICS'}")
+    logger.info("🔗 API Documentation: /docs")
+    logger.info("=" * 60)
 
 @app.get("/")
 def health():
-    """Health check endpoint"""
+    """
+    Health check and service information endpoint
+    
+    Returns service status, capabilities, and usage instructions
+    """
     return {
-        "status": "ok",
-        "service": "ml-risk-engine",
+        "service": "AI Risk Mitigation System",
+        "status": "operational",
         "version": "1.0.0",
-        "engine": "medbert+heuristics" if model_loaded else "heuristic-based",
-        "medbert_loaded": model_loaded,
+        "description": "Production-grade ML engine for AI safety and risk analysis",
+        "engine": {
+            "type": "medbert+heuristics" if model_loaded else "heuristics",
+            "medbert_loaded": model_loaded,
+            "capabilities": [
+                "Hallucination detection",
+                "Bias analysis",
+                "Toxicity screening",
+                "PII leak detection",
+                "Fraud pattern recognition"
+            ]
+        },
+        "usage": {
+            "endpoint": "POST /analyze",
+            "description": "Analyze AI-generated text for comprehensive risk assessment",
+            "example": {
+                "request": {"text": "Your AI-generated content here"},
+                "response_fields": [
+                    "hallucination_risk (LOW/MEDIUM/HIGH)",
+                    "bias_risk (LOW/MEDIUM/HIGH)",
+                    "toxicity_risk (LOW/MEDIUM/HIGH)",
+                    "pii_leak (true/false)",
+                    "fraud_risk (LOW/MEDIUM/HIGH)",
+                    "confidence_score (0.0-1.0)",
+                    "summary (human-readable explanation)",
+                    "engine_used (analysis method)"
+                ]
+            }
+        },
+        "documentation": "/docs",
         "ready": True
     }
 
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze(req: TextRequest):
     """
-    Analyze AI-generated text for various risk factors using MedBERT + heuristics
+    Comprehensive AI Risk Analysis Endpoint
     
-    Returns comprehensive risk assessment including:
-    - hallucination_risk: LOW/MEDIUM/HIGH - MedBERT prediction or heuristic detection
-    - bias_risk: LOW/MEDIUM/HIGH - Derived from MedBERT or heuristic detection
-    - toxicity_risk: LOW/MEDIUM/HIGH - Heuristic detection
-    - pii_leak: bool - Regex-based PII detection
-    - fraud_risk: LOW/MEDIUM/HIGH - Heuristic fraud detection
-    - confidence_score: 0.0-1.0 - Model confidence or analysis confidence
-    - summary: Human-readable explanation
+    Analyzes AI-generated text for multiple risk factors using hybrid ML + heuristic approach.
+    
+    **Risk Categories:**
+    - hallucination_risk (LOW/MEDIUM/HIGH): Detects unverified claims, excessive certainty, or false information
+    - bias_risk (LOW/MEDIUM/HIGH): Identifies biased language, absolute statements, or unfair perspectives
+    - toxicity_risk (LOW/MEDIUM/HIGH): Flags harmful, offensive, or inappropriate content
+    - pii_leak (bool): Detects personally identifiable information (emails, phone numbers, SSN, etc.)
+    - fraud_risk (LOW/MEDIUM/HIGH): Identifies suspicious patterns, urgency tactics, or deceptive language
+    
+    **Additional Fields:**
+    - confidence_score (0.0-1.0): Model confidence in the risk assessment
+    - summary (string): Human-readable explanation with actionable guidance
+    - engine_used (string): Analysis method used (medbert+heuristics or heuristics)
+    - medbert_loaded (bool): Whether MedBERT model is available
+    - processing_time_ms (float): Analysis latency in milliseconds
+    
+    **Returns:** Comprehensive risk assessment for informed content moderation decisions
     """
     start_time = time.time()
     

@@ -466,7 +466,7 @@ def generate_summary(hallucination_risk: str, bias_risk: str, toxicity_risk: str
         risks.append("potentially offensive language detected")
     
     if pii_leak:
-        risks.append("personally identifiable information detected (e.g., emails, phone numbers, SSN)")
+        risks.append("personally identifiable information detected (e.g., emails, phone numbers, government IDs)")
     
     if fraud_risk == "HIGH":
         risks.append("multiple fraud indicators present (urgent language, guarantees, or pressure tactics)")
@@ -478,7 +478,7 @@ def generate_summary(hallucination_risk: str, bias_risk: str, toxicity_risk: str
     elif len(risks) == 1:
         return f"⚠ Risk identified: {risks[0]}. Human review recommended before deployment. Confidence: {confidence:.1%}."
     elif len(risks) == 2:
-        return f"⚠ Multiple risks detected: {risks[0]}, and {risks[1]}. Careful human review strongly recommended. Confidence: {confidence:.1%}."
+        return f"⚠ Multiple risks detected: {risks[0]} and {risks[1]}. Careful human review strongly recommended. Confidence: {confidence:.1%}."
     else:
         # Multiple risks - critical review needed
         risk_list = ", ".join(risks[:-1]) + f", and {risks[-1]}"
@@ -499,7 +499,7 @@ async def startup_event():
         logger.info("   → MedBERT: Hallucination & Bias detection")
         logger.info("   → Heuristics: Toxicity, PII, Fraud detection")
     else:
-        logger.info("⚠️  ENGINE: Heuristics Only (MedBERT unavailable)")
+        logger.info("⚠️ ENGINE: Heuristics Only (MedBERT unavailable)")
         logger.info("   → Using rule-based analysis for all risk categories")
         logger.info("   → Production-grade fallback active")
     

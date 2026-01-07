@@ -484,6 +484,102 @@ def generate_summary(hallucination_risk: str, bias_risk: str, toxicity_risk: str
         risk_list = ", ".join(risks[:-1]) + f", and {risks[-1]}"
         return f"⚠ Critical: Multiple risk factors identified including {risk_list}. Thorough content review and editing required before use. Confidence: {confidence:.1%}."
 
+# Sample text constant for demo endpoint
+DEMO_SAMPLE_TEXT = (
+    "Studies have definitively proven that our revolutionary AI system is 100% accurate "
+    "and guaranteed to provide the best results. Everyone agrees this is the most advanced "
+    "technology ever created. Act now for a limited-time offer - this deal expires soon! "
+    "Contact us immediately at special-offer@example.com or call 555-0123 for exclusive access. "
+    "Scientists confirm this breakthrough technology will absolutely transform your business "
+    "with zero risk and instant results."
+)
+
+def _perform_risk_analysis(text: str) -> dict:
+    """
+    Internal function to perform risk analysis on text.
+    Used by both the demo endpoint and the analyze endpoint.
+    
+    Returns a dictionary with all risk analysis fields.
+    """
+    # Try MedBERT prediction first if model is loaded
+    medbert_risk = None
+    medbert_confidence = None
+    medbert_probs = None
+    
+    if model_loaded:
+        medbert_risk, medbert_confidence, medbert_probs = predict_with_medbert(text)
+        if medbert_risk:
+            logger.info(f"MedBERT prediction: {medbert_risk} (confidence: {medbert_confidence:.3f})")
+    
+    # Map MedBERT risk to hallucination risk if available
+    if medbert_risk:
+        if medbert_risk == "High Risk":
+            hallucination_risk = "HIGH"
+            base_confidence = medbert_confidence
+        elif medbert_risk == "Medium Risk":
+            hallucination_risk = "MEDIUM"
+            base_confidence = medbert_confidence
+        else:  # Low Risk
+            hallucination_risk = "LOW"
+            base_confidence = medbert_confidence
+        
+        # Derive bias risk from MedBERT probabilities
+        bias_risk = "LOW"
+        if medbert_probs is not None and len(medbert_probs) > 1:
+            sorted_probs = sorted(medbert_probs, reverse=True)
+            if sorted_probs[1] > 0.35:
+                bias_risk = "MEDIUM"
+            if sorted_probs[1] > 0.45:
+                bias_risk = "HIGH"
+    else:
+        # Fallback to heuristic detection
+        hallucination_risk, base_confidence = detect_hallucination(text)
+        bias_risk = detect_bias(text)
+    
+    # Always run heuristic detections for toxicity, PII, and fraud
+    toxicity_risk = detect_toxicity(text)
+    pii_leak = detect_pii(text)
+    fraud_risk = detect_fraud(text)
+    
+    # Store risks for confidence calculation
+    risks = {
+        'hallucination_risk': hallucination_risk,
+        'bias_risk': bias_risk,
+        'toxicity_risk': toxicity_risk,
+        'fraud_risk': fraud_risk,
+        'pii_leak': pii_leak
+    }
+    
+    # Calculate overall confidence
+    if medbert_confidence:
+        confidence = medbert_confidence
+        if pii_leak:
+            confidence = min(confidence + 0.05, 0.99)
+        if toxicity_risk == "HIGH" or fraud_risk == "HIGH":
+            confidence = min(confidence + 0.03, 0.99)
+    else:
+        confidence = calculate_confidence(text, risks)
+    
+    # Generate summary
+    summary = generate_summary(
+        hallucination_risk, bias_risk, toxicity_risk,
+        pii_leak, fraud_risk, confidence
+    )
+    
+    # Determine engine used
+    engine_used = "medbert+heuristics" if medbert_risk else "heuristics"
+    
+    return {
+        'hallucination_risk': hallucination_risk,
+        'bias_risk': bias_risk,
+        'toxicity_risk': toxicity_risk,
+        'pii_leak': pii_leak,
+        'fraud_risk': fraud_risk,
+        'confidence_score': confidence,
+        'summary': summary,
+        'engine_used': engine_used
+    }
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize service on startup"""
@@ -526,103 +622,28 @@ def root_demo():
     
     For custom text analysis, use POST /analyze with your own content.
     """
-    # Sample AI-generated text that demonstrates multiple risk factors
-    sample_text = (
-        "Studies have definitively proven that our revolutionary AI system is 100% accurate "
-        "and guaranteed to provide the best results. Everyone agrees this is the most advanced "
-        "technology ever created. Act now for a limited-time offer - this deal expires soon! "
-        "Contact us immediately at special-offer@example.com or call 555-0123 for exclusive access. "
-        "Scientists confirm this breakthrough technology will absolutely transform your business "
-        "with zero risk and instant results."
-    )
-    
     start_time = time.time()
     
     try:
-        # Perform actual risk analysis using the same logic as /analyze
-        text = sample_text.strip()
-        
-        # Try MedBERT prediction first if model is loaded
-        medbert_risk = None
-        medbert_confidence = None
-        medbert_probs = None
-        
-        if model_loaded:
-            medbert_risk, medbert_confidence, medbert_probs = predict_with_medbert(text)
-            if medbert_risk:
-                logger.info(f"MedBERT prediction: {medbert_risk} (confidence: {medbert_confidence:.3f})")
-        
-        # Map MedBERT risk to hallucination risk if available
-        if medbert_risk:
-            if medbert_risk == "High Risk":
-                hallucination_risk = "HIGH"
-                base_confidence = medbert_confidence
-            elif medbert_risk == "Medium Risk":
-                hallucination_risk = "MEDIUM"
-                base_confidence = medbert_confidence
-            else:  # Low Risk
-                hallucination_risk = "LOW"
-                base_confidence = medbert_confidence
-            
-            # Derive bias risk from MedBERT probabilities
-            bias_risk = "LOW"
-            if medbert_probs is not None and len(medbert_probs) > 1:
-                sorted_probs = sorted(medbert_probs, reverse=True)
-                if sorted_probs[1] > 0.35:
-                    bias_risk = "MEDIUM"
-                if sorted_probs[1] > 0.45:
-                    bias_risk = "HIGH"
-        else:
-            # Fallback to heuristic detection
-            hallucination_risk, base_confidence = detect_hallucination(text)
-            bias_risk = detect_bias(text)
-        
-        # Always run heuristic detections for toxicity, PII, and fraud
-        toxicity_risk = detect_toxicity(text)
-        pii_leak = detect_pii(text)
-        fraud_risk = detect_fraud(text)
-        
-        # Store risks for confidence calculation
-        risks = {
-            'hallucination_risk': hallucination_risk,
-            'bias_risk': bias_risk,
-            'toxicity_risk': toxicity_risk,
-            'fraud_risk': fraud_risk,
-            'pii_leak': pii_leak
-        }
-        
-        # Calculate overall confidence
-        if medbert_confidence:
-            confidence = medbert_confidence
-            if pii_leak:
-                confidence = min(confidence + 0.05, 0.99)
-            if toxicity_risk == "HIGH" or fraud_risk == "HIGH":
-                confidence = min(confidence + 0.03, 0.99)
-        else:
-            confidence = calculate_confidence(text, risks)
-        
-        # Generate summary
-        summary = generate_summary(
-            hallucination_risk, bias_risk, toxicity_risk,
-            pii_leak, fraud_risk, confidence
-        )
+        # Perform actual risk analysis using shared function
+        analysis = _perform_risk_analysis(DEMO_SAMPLE_TEXT)
         
         processing_time = (time.time() - start_time) * 1000
-        engine_used = "medbert+heuristics" if medbert_risk else "heuristics"
         
-        logger.info(f"Demo analysis complete ({engine_used}) - "
-                   f"H:{hallucination_risk} B:{bias_risk} T:{toxicity_risk} "
-                   f"P:{pii_leak} F:{fraud_risk} C:{confidence:.2f}")
+        logger.info(f"Demo analysis complete ({analysis['engine_used']}) - "
+                   f"H:{analysis['hallucination_risk']} B:{analysis['bias_risk']} "
+                   f"T:{analysis['toxicity_risk']} P:{analysis['pii_leak']} "
+                   f"F:{analysis['fraud_risk']} C:{analysis['confidence_score']:.2f}")
         
         return AnalysisResponse(
-            hallucination_risk=hallucination_risk,
-            bias_risk=bias_risk,
-            toxicity_risk=toxicity_risk,
-            pii_leak=pii_leak,
-            fraud_risk=fraud_risk,
-            confidence_score=round(confidence, 3),
-            summary=summary,
-            engine_used=engine_used,
+            hallucination_risk=analysis['hallucination_risk'],
+            bias_risk=analysis['bias_risk'],
+            toxicity_risk=analysis['toxicity_risk'],
+            pii_leak=analysis['pii_leak'],
+            fraud_risk=analysis['fraud_risk'],
+            confidence_score=round(analysis['confidence_score'], 3),
+            summary=analysis['summary'],
+            engine_used=analysis['engine_used'],
             medbert_loaded=model_loaded,
             processing_time_ms=round(processing_time, 1)
         )
@@ -631,19 +652,53 @@ def root_demo():
         logger.error(f"Demo analysis error: {e}")
         import traceback
         traceback.print_exc()
-        # Return a safe fallback with heuristic analysis
-        return AnalysisResponse(
-            hallucination_risk="HIGH",
-            bias_risk="HIGH",
-            toxicity_risk="LOW",
-            pii_leak=True,
-            fraud_risk="HIGH",
-            confidence_score=0.850,
-            summary="⚠ Critical: Multiple risk factors identified including high hallucination risk detected (unverified claims or excessive certainty), significant bias indicators (absolute statements or loaded language), personally identifiable information detected (e.g., emails, phone numbers, government IDs), and multiple fraud indicators present (urgent language, guarantees, or pressure tactics). Thorough content review and editing required before use. Confidence: 85.0%.",
-            engine_used="heuristics",
-            medbert_loaded=model_loaded,
-            processing_time_ms=0.5
-        )
+        # Fallback: run analysis on sample text using heuristics directly
+        try:
+            hallucination_risk, base_conf = detect_hallucination(DEMO_SAMPLE_TEXT)
+            bias_risk = detect_bias(DEMO_SAMPLE_TEXT)
+            toxicity_risk = detect_toxicity(DEMO_SAMPLE_TEXT)
+            pii_leak = detect_pii(DEMO_SAMPLE_TEXT)
+            fraud_risk = detect_fraud(DEMO_SAMPLE_TEXT)
+            
+            risks = {
+                'hallucination_risk': hallucination_risk,
+                'bias_risk': bias_risk,
+                'toxicity_risk': toxicity_risk,
+                'fraud_risk': fraud_risk,
+                'pii_leak': pii_leak
+            }
+            
+            confidence = calculate_confidence(DEMO_SAMPLE_TEXT, risks)
+            summary = generate_summary(hallucination_risk, bias_risk, toxicity_risk, 
+                                      pii_leak, fraud_risk, confidence)
+            
+            return AnalysisResponse(
+                hallucination_risk=hallucination_risk,
+                bias_risk=bias_risk,
+                toxicity_risk=toxicity_risk,
+                pii_leak=pii_leak,
+                fraud_risk=fraud_risk,
+                confidence_score=round(confidence, 3),
+                summary=summary,
+                engine_used="heuristics",
+                medbert_loaded=model_loaded,
+                processing_time_ms=0.5
+            )
+        except Exception as fallback_error:
+            logger.error(f"Fallback also failed: {fallback_error}")
+            # Last resort: return hard-coded safe fallback
+            return AnalysisResponse(
+                hallucination_risk="HIGH",
+                bias_risk="HIGH",
+                toxicity_risk="LOW",
+                pii_leak=True,
+                fraud_risk="HIGH",
+                confidence_score=0.850,
+                summary="⚠ Critical: Multiple risk factors identified including high hallucination risk detected (unverified claims or excessive certainty), significant bias indicators (absolute statements or loaded language), personally identifiable information detected (e.g., emails, phone numbers, government IDs), and multiple fraud indicators present (urgent language, guarantees, or pressure tactics). Thorough content review and editing required before use. Confidence: 85.0%.",
+                engine_used="heuristics",
+                medbert_loaded=model_loaded,
+                processing_time_ms=0.5
+            )
 
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze(req: TextRequest):
@@ -676,91 +731,25 @@ async def analyze(req: TextRequest):
         
         text = req.text.strip()
         
-        # Try MedBERT prediction first if model is loaded
-        medbert_risk = None
-        medbert_confidence = None
-        medbert_probs = None
-        
-        if model_loaded:
-            medbert_risk, medbert_confidence, medbert_probs = predict_with_medbert(text)
-            if medbert_risk:
-                logger.info(f"MedBERT prediction: {medbert_risk} (confidence: {medbert_confidence:.3f})")
-        
-        # Map MedBERT risk to hallucination risk if available
-        if medbert_risk:
-            if medbert_risk == "High Risk":
-                hallucination_risk = "HIGH"
-                base_confidence = medbert_confidence
-            elif medbert_risk == "Medium Risk":
-                hallucination_risk = "MEDIUM"
-                base_confidence = medbert_confidence
-            else:  # Low Risk
-                hallucination_risk = "LOW"
-                base_confidence = medbert_confidence
-            
-            # Derive bias risk from MedBERT probabilities
-            bias_risk = "LOW"
-            if medbert_probs is not None and len(medbert_probs) > 1:
-                sorted_probs = sorted(medbert_probs, reverse=True)
-                # If second highest probability is high, suggests uncertainty/bias
-                if sorted_probs[1] > 0.35:
-                    bias_risk = "MEDIUM"
-                if sorted_probs[1] > 0.45:
-                    bias_risk = "HIGH"
-        else:
-            # Fallback to heuristic detection
-            hallucination_risk, base_confidence = detect_hallucination(text)
-            bias_risk = detect_bias(text)
-        
-        # Always run heuristic detections for toxicity, PII, and fraud
-        toxicity_risk = detect_toxicity(text)
-        pii_leak = detect_pii(text)
-        fraud_risk = detect_fraud(text)
-        
-        # Store risks for confidence calculation
-        risks = {
-            'hallucination_risk': hallucination_risk,
-            'bias_risk': bias_risk,
-            'toxicity_risk': toxicity_risk,
-            'fraud_risk': fraud_risk,
-            'pii_leak': pii_leak
-        }
-        
-        # Calculate overall confidence (use MedBERT confidence if available)
-        if medbert_confidence:
-            # Adjust MedBERT confidence based on other factors
-            confidence = medbert_confidence
-            if pii_leak:
-                confidence = min(confidence + 0.05, 0.99)
-            if toxicity_risk == "HIGH" or fraud_risk == "HIGH":
-                confidence = min(confidence + 0.03, 0.99)
-        else:
-            confidence = calculate_confidence(text, risks)
-        
-        # Generate summary
-        summary = generate_summary(
-            hallucination_risk, bias_risk, toxicity_risk,
-            pii_leak, fraud_risk, confidence
-        )
+        # Perform risk analysis using shared function
+        analysis = _perform_risk_analysis(text)
         
         processing_time = (time.time() - start_time) * 1000  # Convert to ms
         
-        # Determine engine used for this specific analysis
-        engine_used = "medbert+heuristics" if medbert_risk else "heuristics"
-        
-        logger.info(f"Analysis complete ({engine_used}) in {processing_time:.1f}ms - "
-                   f"H:{hallucination_risk} B:{bias_risk} T:{toxicity_risk} "
-                   f"P:{pii_leak} F:{fraud_risk} C:{confidence:.2f}")
+        logger.info(f"Analysis complete ({analysis['engine_used']}) in {processing_time:.1f}ms - "
+                   f"H:{analysis['hallucination_risk']} B:{analysis['bias_risk']} "
+                   f"T:{analysis['toxicity_risk']} P:{analysis['pii_leak']} "
+                   f"F:{analysis['fraud_risk']} C:{analysis['confidence_score']:.2f}")
         
         return AnalysisResponse(
-            hallucination_risk=hallucination_risk,
-            bias_risk=bias_risk,
-            toxicity_risk=toxicity_risk,
-            pii_leak=pii_leak,
-            fraud_risk=fraud_risk,
-            confidence_score=round(confidence, 3),
-            summary=summary,
-            engine_used=engine_used,
+            hallucination_risk=analysis['hallucination_risk'],
+            bias_risk=analysis['bias_risk'],
+            toxicity_risk=analysis['toxicity_risk'],
+            pii_leak=analysis['pii_leak'],
+            fraud_risk=analysis['fraud_risk'],
+            confidence_score=round(analysis['confidence_score'], 3),
+            summary=analysis['summary'],
+            engine_used=analysis['engine_used'],
             medbert_loaded=model_loaded,
             processing_time_ms=round(processing_time, 1)
         )

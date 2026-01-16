@@ -147,7 +147,7 @@ Average Confidence: ${(history.reduce((sum, h) => sum + (h.confidence_score || 0
                         </span>
                       )}
                     </div>
-                    <p className="text-gray-300 text-sm line-clamp-2">{item.text?.substring(0, 150)}...</p>
+                    <p className="text-gray-300 text-sm line-clamp-2">{item.text}</p>
                   </div>
                 </div>
 

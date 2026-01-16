@@ -117,7 +117,7 @@ export default function Dashboard() {
                       </span>
                       <RiskBadge risk={getMaxRisk(scan)} size="sm" />
                     </div>
-                    <p className="text-gray-300 text-sm line-clamp-2">{scan.text?.substring(0, 100)}...</p>
+                    <p className="text-gray-300 text-sm line-clamp-2">{scan.text}</p>
                   </div>
                 ))}
               </div>

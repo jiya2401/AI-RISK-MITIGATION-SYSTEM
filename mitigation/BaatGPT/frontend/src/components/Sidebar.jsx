@@ -33,7 +33,7 @@ export default function Sidebar({ activeTab, setActiveTab }) {
       </nav>
 
       <div className="p-4 border-t border-dark-border text-sm text-gray-500">
-        <p>© 2026 AI Risk Mitigation</p>
+        <p>© {new Date().getFullYear()} AI Risk Mitigation</p>
       </div>
     </div>
   );

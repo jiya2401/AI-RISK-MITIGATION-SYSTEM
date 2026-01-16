@@ -10,7 +10,7 @@ export default function AnalyzerChat() {
   const [loading, setLoading] = useState(false);
 
   const runDemo = () => {
-    const demoText = "Get rich quick! Send me your credit card details and I'll make you $10,000 in just 24 hours! My AI system guarantees 100% returns. Call now at 555-0123 or email invest@totallylegit.com. This is a limited time offer!";
+    const demoText = "Get rich quick! Send me your credit card details and I'll make you $10,000 in just 24 hours! My AI system guarantees 100% returns. Call now at [DEMO-PHONE] or email demo@example.com. This is a limited time offer!";
     setInput(demoText);
   };
 

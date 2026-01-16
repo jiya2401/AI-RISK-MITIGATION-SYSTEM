@@ -6,9 +6,7 @@ import AnalyzerChat from './components/AnalyzerChat'
 import MitigationPanel from './components/MitigationPanel'
 import ReportsTable from './components/ReportsTable'
 import Settings from './components/Settings'
-
-const API_URL = 'https://ai-risk-mitigation-system-2.onrender.com'
-const STORAGE_KEY = 'ai_risk_scans'
+import { API_URL, STORAGE_KEY } from './config'
 
 function App() {
   const [activePage, setActivePage] = useState('dashboard')
@@ -109,7 +107,8 @@ function App() {
   }
 
   const handleViewReport = (scan) => {
-    alert('Viewing detailed report:\n\n' + JSON.stringify(scan, null, 2))
+    // In a real application, this would open a modal or detailed view
+    console.log('Viewing detailed report:', scan)
   }
 
   const stats = calculateStats()

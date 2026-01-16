@@ -55,7 +55,7 @@ function ReportsTable({ scans, onViewDetails }) {
     URL.revokeObjectURL(url)
   }
 
-  const copyReportText = () => {
+  const copyReportText = async () => {
     const reportText = scans.map((scan, index) => {
       return `
 Analysis #${index + 1}
@@ -70,8 +70,11 @@ Summary: ${scan.summary || 'N/A'}
 ---`
     }).join('\n')
 
-    navigator.clipboard.writeText(reportText)
-    alert('Report copied to clipboard!')
+    try {
+      await navigator.clipboard.writeText(reportText)
+    } catch (err) {
+      console.error('Failed to copy report:', err)
+    }
   }
 
   return (

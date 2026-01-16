@@ -114,10 +114,17 @@ function MitigationPanel({ latestScan }) {
     }
   }
 
-  const copyToClipboard = (text, index) => {
-    navigator.clipboard.writeText(text)
-    setCopiedIndex(index)
-    setTimeout(() => setCopiedIndex(null), 2000)
+  const copyToClipboard = async (text, index) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedIndex(index)
+      setTimeout(() => setCopiedIndex(null), 2000)
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err)
+      // Still show feedback even if copy failed
+      setCopiedIndex(index)
+      setTimeout(() => setCopiedIndex(null), 2000)
+    }
   }
 
   return (

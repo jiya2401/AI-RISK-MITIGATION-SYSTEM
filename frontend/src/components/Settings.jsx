@@ -1,3 +1,5 @@
+import { API_URL } from '../config'
+
 function Settings() {
   return (
     <div className="space-y-6">
@@ -11,7 +13,7 @@ function Settings() {
               <label className="block text-slate-400 text-sm mb-2">API Endpoint</label>
               <input
                 type="text"
-                value="https://ai-risk-mitigation-system-2.onrender.com"
+                value={API_URL}
                 disabled
                 className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-3 text-slate-300"
               />

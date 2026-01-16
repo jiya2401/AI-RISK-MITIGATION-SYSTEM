@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { API_URL } from '../config'
 
 function Header() {
   const [isDark, setIsDark] = useState(true)
@@ -10,7 +11,7 @@ function Header() {
 
   const checkBackendHealth = async () => {
     try {
-      const response = await fetch('https://ai-risk-mitigation-system-2.onrender.com/analyze', {
+      const response = await fetch(`${API_URL}/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: 'health check' })

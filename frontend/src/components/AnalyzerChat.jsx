@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import RiskBadge from './RiskBadge'
 
 function AnalyzerChat({ onAnalyze, loading }) {
   const [messages, setMessages] = useState([])
